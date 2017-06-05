@@ -1121,6 +1121,18 @@ extension NextLevel {
             self._videoOutput = AVCaptureVideoDataOutput()
             self._videoOutput?.alwaysDiscardsLateVideoFrames = false
             
+            if let vc = self._videoOutput?.connection(withMediaType: AVMediaTypeVideo) {
+                if vc.isVideoMirroringSupported {
+                    vc.isVideoMirrored = true
+                }
+            }
+            if let pc = self.previewLayer.connection {
+                if pc.isVideoMirroringSupported {
+                    pc.automaticallyAdjustsVideoMirroring = false
+                    pc.isVideoMirrored = true
+                }
+            }
+            
             var videoSettings = [String(kCVPixelBufferPixelFormatTypeKey):Int(kCVPixelFormatType_32BGRA)]
             if let formatTypes = self._videoOutput?.availableVideoCVPixelFormatTypes as? [Int] {
                 var supportsFullRange = false
