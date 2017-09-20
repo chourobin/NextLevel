@@ -14,11 +14,11 @@
 		06250A9E1D8C57AA0008C903 /* NextLevelConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060D50F01D5BF09F00247AD0 /* NextLevelConfiguration.swift */; };
 		06250A9F1D8C57AD0008C903 /* NextLevelSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060D50EE1D5BC77E00247AD0 /* NextLevelSession.swift */; };
 		06250AA01D8C57AF0008C903 /* NextLevelClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060D50F31D5C4D5A00247AD0 /* NextLevelClip.swift */; };
-		06250AA11D8C57B20008C903 /* NextLevel+Additions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Additions.swift */; };
+		06250AA11D8C57B20008C903 /* NextLevel+Foundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */; };
 		06250AA21D8C57B50008C903 /* NextLevel+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06BA97681D7FFDF200CD20D7 /* NextLevel+Metadata.swift */; };
 		06250AA31D8C57B70008C903 /* NextLevel+AVFoundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */; };
 		0684A2301EC22C1C00A9F9EB /* FocusIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0684A22F1EC22C1C00A9F9EB /* FocusIndicatorView.swift */; };
-		0699B4BD1D7942D4005958BC /* NextLevel+Additions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Additions.swift */; };
+		0699B4BD1D7942D4005958BC /* NextLevel+Foundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */; };
 		06AECC651AC3830800EFCD03 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06AECC641AC3830800EFCD03 /* AppDelegate.swift */; };
 		06AECC671AC3830800EFCD03 /* CameraViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06AECC661AC3830800EFCD03 /* CameraViewController.swift */; };
 		06AECC6C1AC3830800EFCD03 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 06AECC6B1AC3830800EFCD03 /* Images.xcassets */; };
@@ -27,6 +27,10 @@
 		06C86E391D81DD5800A43411 /* NextLevel+AVFoundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */; };
 		06C86E531D8208D900A43411 /* NextLevel.h in Headers */ = {isa = PBXBuildFile; fileRef = 06C86E511D8208D900A43411 /* NextLevel.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		06C86E5B1D83857500A43411 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 06C86E591D83857500A43411 /* LaunchScreen.storyboard */; };
+		06CF9CE61F7064170011CE09 /* NextLevel+CoreImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CF9CE51F7064170011CE09 /* NextLevel+CoreImage.swift */; };
+		06CF9CE71F7064170011CE09 /* NextLevel+CoreImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CF9CE51F7064170011CE09 /* NextLevel+CoreImage.swift */; };
+		06CF9CE91F70678D0011CE09 /* NextLevel+CoreMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CF9CE81F70678D0011CE09 /* NextLevel+CoreMedia.swift */; };
+		06CF9CEA1F70678D0011CE09 /* NextLevel+CoreMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CF9CE81F70678D0011CE09 /* NextLevel+CoreMedia.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,7 +38,7 @@
 		060D50F01D5BF09F00247AD0 /* NextLevelConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NextLevelConfiguration.swift; path = ../Sources/NextLevelConfiguration.swift; sourceTree = "<group>"; };
 		060D50F31D5C4D5A00247AD0 /* NextLevelClip.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NextLevelClip.swift; path = ../Sources/NextLevelClip.swift; sourceTree = "<group>"; };
 		0684A22F1EC22C1C00A9F9EB /* FocusIndicatorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FocusIndicatorView.swift; sourceTree = "<group>"; };
-		0699B4BC1D7942D4005958BC /* NextLevel+Additions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = "NextLevel+Additions.swift"; path = "../Sources/NextLevel+Additions.swift"; sourceTree = "<group>"; };
+		0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = "NextLevel+Foundation.swift"; path = "../Sources/NextLevel+Foundation.swift"; sourceTree = "<group>"; };
 		06AECC5F1AC3830800EFCD03 /* NL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NL.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		06AECC631AC3830800EFCD03 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		06AECC641AC3830800EFCD03 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -50,6 +54,8 @@
 		06C86E511D8208D900A43411 /* NextLevel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NextLevel.h; path = ../../Sources/NextLevel.h; sourceTree = "<group>"; };
 		06C86E521D8208D900A43411 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		06C86E5A1D83857500A43411 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = NextLevel/Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		06CF9CE51F7064170011CE09 /* NextLevel+CoreImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NextLevel+CoreImage.swift"; path = "../Sources/NextLevel+CoreImage.swift"; sourceTree = "<group>"; };
+		06CF9CE81F70678D0011CE09 /* NextLevel+CoreMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NextLevel+CoreMedia.swift"; path = "../Sources/NextLevel+CoreMedia.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,13 +123,11 @@
 		06AECC841AC3892A00EFCD03 /* NextLevel */ = {
 			isa = PBXGroup;
 			children = (
+				06CF9CE41F7047B20011CE09 /* Extensions */,
 				06AECC871AC38B3700EFCD03 /* NextLevel.swift */,
+				060D50F31D5C4D5A00247AD0 /* NextLevelClip.swift */,
 				060D50F01D5BF09F00247AD0 /* NextLevelConfiguration.swift */,
 				060D50EE1D5BC77E00247AD0 /* NextLevelSession.swift */,
-				060D50F31D5C4D5A00247AD0 /* NextLevelClip.swift */,
-				0699B4BC1D7942D4005958BC /* NextLevel+Additions.swift */,
-				06BA97681D7FFDF200CD20D7 /* NextLevel+Metadata.swift */,
-				06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */,
 			);
 			name = NextLevel;
 			sourceTree = "<group>";
@@ -136,6 +140,18 @@
 			);
 			name = Framework;
 			path = NextLevel;
+			sourceTree = "<group>";
+		};
+		06CF9CE41F7047B20011CE09 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */,
+				06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */,
+				06CF9CE51F7064170011CE09 /* NextLevel+CoreImage.swift */,
+				06CF9CE81F70678D0011CE09 /* NextLevel+CoreMedia.swift */,
+				06BA97681D7FFDF200CD20D7 /* NextLevel+Metadata.swift */,
+			);
+			name = Extensions;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -194,12 +210,12 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 0720;
-				LastUpgradeCheck = 0810;
+				LastUpgradeCheck = 0900;
 				ORGANIZATIONNAME = NextLevel;
 				TargetAttributes = {
 					06AECC5E1AC3830800EFCD03 = {
 						CreatedOnToolsVersion = 6.2;
-						LastSwiftMigration = 0800;
+						LastSwiftMigration = 0900;
 					};
 					06C86E4E1D8208D900A43411 = {
 						CreatedOnToolsVersion = 8.0;
@@ -252,7 +268,8 @@
 			files = (
 				06AECC671AC3830800EFCD03 /* CameraViewController.swift in Sources */,
 				06C86E391D81DD5800A43411 /* NextLevel+AVFoundation.swift in Sources */,
-				0699B4BD1D7942D4005958BC /* NextLevel+Additions.swift in Sources */,
+				06CF9CE91F70678D0011CE09 /* NextLevel+CoreMedia.swift in Sources */,
+				0699B4BD1D7942D4005958BC /* NextLevel+Foundation.swift in Sources */,
 				0684A2301EC22C1C00A9F9EB /* FocusIndicatorView.swift in Sources */,
 				060D50EF1D5BC77E00247AD0 /* NextLevelSession.swift in Sources */,
 				060D50F41D5C4D5A00247AD0 /* NextLevelClip.swift in Sources */,
@@ -260,6 +277,7 @@
 				06AECC881AC38B3700EFCD03 /* NextLevel.swift in Sources */,
 				06BA97691D7FFDF200CD20D7 /* NextLevel+Metadata.swift in Sources */,
 				06AECC651AC3830800EFCD03 /* AppDelegate.swift in Sources */,
+				06CF9CE61F7064170011CE09 /* NextLevel+CoreImage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,7 +287,9 @@
 			files = (
 				06250AA01D8C57AF0008C903 /* NextLevelClip.swift in Sources */,
 				06250A9E1D8C57AA0008C903 /* NextLevelConfiguration.swift in Sources */,
-				06250AA11D8C57B20008C903 /* NextLevel+Additions.swift in Sources */,
+				06CF9CEA1F70678D0011CE09 /* NextLevel+CoreMedia.swift in Sources */,
+				06CF9CE71F7064170011CE09 /* NextLevel+CoreImage.swift in Sources */,
+				06250AA11D8C57B20008C903 /* NextLevel+Foundation.swift in Sources */,
 				06250A9F1D8C57AD0008C903 /* NextLevelSession.swift in Sources */,
 				06250AA21D8C57B50008C903 /* NextLevel+Metadata.swift in Sources */,
 				06250A9D1D8C57A60008C903 /* NextLevel.swift in Sources */,
@@ -300,14 +320,20 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -346,14 +372,20 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -386,7 +418,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.nextlevel.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 3.0;
+				SWIFT_VERSION = 4.0;
 			};
 			name = Debug;
 		};
@@ -401,7 +433,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.nextlevel.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_VERSION = 3.0;
+				SWIFT_VERSION = 4.0;
 			};
 			name = Release;
 		};
