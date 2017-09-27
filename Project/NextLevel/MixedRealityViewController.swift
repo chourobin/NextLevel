@@ -1,5 +1,5 @@
 //
-//  CameraViewController.swift
+//  MixedRealityViewController.swift
 //  NextLevel (http://nextlevel.engineering/)
 //
 //  Copyright (c) 2016-present patrick piemonte (http://patrickpiemonte.com)
@@ -25,31 +25,36 @@
 import UIKit
 import AVFoundation
 import Photos
+import ARKit
 //import NextLevel
 
-class CameraViewController: UIViewController {
+@available(iOS 11.0, *)
+class MixedRealityViewController: UIViewController {
 
     // MARK: - UIViewController
-
+    
     override public var prefersStatusBarHidden: Bool {
         return true
     }
     
     // MARK: - properties
     
-    internal var previewView: UIView?
+    internal var arConfig: ARWorldTrackingConfiguration?
+    internal var arView: ARSCNView?
+    internal var arSession: ARSession?
+    
     internal var gestureView: UIView?
     internal var focusView: FocusIndicatorView?
     internal var controlDockView: UIView?
-
+    
     internal var recordButton: UIImageView?
     internal var flipButton: UIButton?
     internal var flashButton: UIButton?
     internal var saveButton: UIButton?
-
+    
     internal var longPressGestureRecognizer: UILongPressGestureRecognizer?
     internal var photoTapGestureRecognizer: UITapGestureRecognizer?
-    internal var focusTapGestureRecognizer: UITapGestureRecognizer?
+    internal var tapGestureRecognizer: UITapGestureRecognizer?
     internal var flipDoubleTapGestureRecognizer: UITapGestureRecognizer?
     
     internal var _panStartPoint: CGPoint = .zero
@@ -58,7 +63,6 @@ class CameraViewController: UIViewController {
     // MARK: - object lifecycle
     
     public override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
-        
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
     }
     
@@ -70,26 +74,37 @@ class CameraViewController: UIViewController {
     }
     
     // MARK: - view lifecycle
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        
         self.view.backgroundColor = UIColor.black
         self.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
         let screenBounds = UIScreen.main.bounds
-
+        
         // preview
-        self.previewView = UIView(frame: screenBounds)
-        if let previewView = self.previewView {
-            previewView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            previewView.backgroundColor = UIColor.black
-            NextLevel.shared.previewLayer.frame = previewView.bounds
-            previewView.layer.addSublayer(NextLevel.shared.previewLayer)
-            self.view.addSubview(previewView)
+        self.arView = ARSCNView(frame: screenBounds)
+        if let arView = self.arView {
+            arView.delegate = self
+            
+            // setup the session delegate (your controller manages this instead of NextLevel)
+            self.arSession = arView.session
+            self.arSession?.delegate = self
+            
+            arView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            arView.backgroundColor = UIColor.black
+            arView.scene = SCNScene()
+            arView.isPlaying = true
+            arView.loops = true
+            
+            arView.debugOptions = ARSCNDebugOptions.showFeaturePoints
+            
+            NextLevel.shared.previewLayer.frame = arView.frame
+            self.view.addSubview(arView)
         }
         
-        self.focusView = FocusIndicatorView(frame: .zero)
+        //self.focusView = FocusIndicatorView(frame: .zero)
         
         // buttons
         self.recordButton = UIImageView(image: UIImage(named: "record_button"))
@@ -134,7 +149,7 @@ class CameraViewController: UIViewController {
             
             if let flipButton = self.flipButton, let recordButton = self.recordButton {
                 flipButton.center = CGPoint(x: recordButton.center.x + controlDockView.bounds.width * 0.25 + flipButton.bounds.width * 0.5, y: recordButton.center.y)
-                controlDockView.addSubview(flipButton)
+                //controlDockView.addSubview(flipButton)
             }
             
             if let saveButton = self.saveButton, let recordButton = self.recordButton {
@@ -150,59 +165,78 @@ class CameraViewController: UIViewController {
             gestureView.frame.size.height -= controlDockView.frame.height
             gestureView.backgroundColor = .clear
             self.view.addSubview(gestureView)
-
-            self.focusTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleFocusTapGestureRecognizer(_:)))
-            if let focusTapGestureRecognizer = self.focusTapGestureRecognizer {
-                focusTapGestureRecognizer.delegate = self
-                focusTapGestureRecognizer.numberOfTapsRequired = 1
-                gestureView.addGestureRecognizer(focusTapGestureRecognizer)
+            
+            self.tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleTapGestureRecognizer(_:)))
+            if let tapGestureRecognizer = self.tapGestureRecognizer {
+                tapGestureRecognizer.delegate = self
+                tapGestureRecognizer.numberOfTapsRequired = 1
+                gestureView.addGestureRecognizer(tapGestureRecognizer)
             }
         }
+        
+        self.arConfig = ARWorldTrackingConfiguration()
+        self.arConfig?.providesAudioData = true
+        self.arConfig?.planeDetection = .horizontal
         
         // Configure NextLevel by modifying the configuration ivars
         let nextLevel = NextLevel.shared
         nextLevel.delegate = self
         nextLevel.deviceDelegate = self
-        nextLevel.flashDelegate = self
         nextLevel.videoDelegate = self
-        nextLevel.photoDelegate = self
+        
+        nextLevel.captureMode = .arKit
+        nextLevel.videoStabilizationMode = .off
         
         // video configuration
         nextLevel.videoConfiguration.bitRate = 2000000
         nextLevel.videoConfiguration.scalingMode = AVVideoScalingModeResizeAspectFill
-        
+        nextLevel.videoConfiguration.profileLevel = AVVideoProfileLevelH264HighAutoLevel
+
         // audio configuration
         nextLevel.audioConfiguration.bitRate = 96000
+        
+        // ar configuration
+        nextLevel.arConfiguration?.config = self.arConfig
+        nextLevel.arConfiguration?.session = self.arSession
+        nextLevel.arConfiguration?.runOptions = [.resetTracking, .removeExistingAnchors]
     }
-
+    
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        let nextLevel = NextLevel.shared
-        if nextLevel.authorizationStatus(forMediaType: AVMediaType.video) == .authorized &&
-            nextLevel.authorizationStatus(forMediaType: AVMediaType.audio) == .authorized {
-            do {
-                try nextLevel.start()
-            } catch {
-                print("NextLevel, failed to start camera session")
+        if NextLevel.shared.isRunning == false {
+            let nextLevel = NextLevel.shared
+            if nextLevel.authorizationStatus(forMediaType: AVMediaType.video) == .authorized &&
+                nextLevel.authorizationStatus(forMediaType: AVMediaType.audio) == .authorized {
+                do {
+                    try nextLevel.start()
+                } catch {
+                    print("NextLevel, failed to start camera session")
+                }
+            } else {
+                nextLevel.requestAuthorization(forMediaType: AVMediaType.video)
+                nextLevel.requestAuthorization(forMediaType: AVMediaType.audio)
             }
         } else {
-            nextLevel.requestAuthorization(forMediaType: AVMediaType.video)
-            nextLevel.requestAuthorization(forMediaType: AVMediaType.audio)
+            // handleCameraDidStart
         }
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
-        NextLevel.shared.stop()
+        if NextLevel.shared.isRunning {
+            NextLevel.shared.stop()
+            NextLevel.shared.videoZoomFactor = 1.0
+        }
     }
     
 }
 
 // MARK: - library
 
-extension CameraViewController {
+@available(iOS 11.0, *)
+extension MixedRealityViewController {
     
     internal func albumAssetCollection(withTitle title: String) -> PHAssetCollection? {
         let predicate = NSPredicate(format: "localizedTitle = %@", title)
@@ -215,11 +249,45 @@ extension CameraViewController {
         return nil
     }
     
+    internal func saveVideo(withURL url: URL) {
+        PHPhotoLibrary.shared().performChanges({
+            let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle)
+            if albumAssetCollection == nil {
+                let changeRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: NextLevelAlbumTitle)
+                let _ = changeRequest.placeholderForCreatedAssetCollection
+            }}, completionHandler: { (success1: Bool, error1: Error?) in
+                if let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle) {
+                    PHPhotoLibrary.shared().performChanges({
+                        if let assetChangeRequest = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url) {
+                            let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: albumAssetCollection)
+                            let enumeration: NSArray = [assetChangeRequest.placeholderForCreatedAsset!]
+                            assetCollectionChangeRequest?.addAssets(enumeration)
+                        }
+                    }, completionHandler: { (success2: Bool, error2: Error?) in
+                        if success2 == true {
+                            // prompt that the video has been saved
+                            let alertController = UIAlertController(title: "Video Saved!", message: "Saved to the camera roll.", preferredStyle: .alert)
+                            let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+                            alertController.addAction(okAction)
+                            self.present(alertController, animated: true, completion: nil)
+                        } else {
+                            // prompt that the video has been saved
+                            let alertController = UIAlertController(title: "Oops!", message: "Something failed!", preferredStyle: .alert)
+                            let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+                            alertController.addAction(okAction)
+                            self.present(alertController, animated: true, completion: nil)
+                        }
+                    })
+                }
+        })
+    }
+    
 }
 
 // MARK: - capture
 
-extension CameraViewController {
+@available(iOS 11.0, *)
+extension MixedRealityViewController {
     
     internal func startCapture() {
         self.photoTapGestureRecognizer?.isEnabled = false
@@ -256,62 +324,25 @@ extension CameraViewController {
                     self.saveVideo(withURL: videoUrl)
                 } else {
                     // prompt that the video has been saved
-                    let alertController = UIAlertController(title: "Oops!", message: "An error occured!", preferredStyle: .alert)
+                    let alertController = UIAlertController(title: "Oops!", message: "Something failed!", preferredStyle: .alert)
                     let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
                     alertController.addAction(okAction)
                     self.present(alertController, animated: true, completion: nil)
                 }
             }
-        
         }
-        
-    }
-    
-    internal func saveVideo(withURL url: URL) {
-        PHPhotoLibrary.shared().performChanges({
-            let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle)
-            if albumAssetCollection == nil {
-                let changeRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: NextLevelAlbumTitle)
-                let _ = changeRequest.placeholderForCreatedAssetCollection
-            }}, completionHandler: { (success1: Bool, error1: Error?) in
-                if let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle) {
-                    PHPhotoLibrary.shared().performChanges({
-                        if let assetChangeRequest = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url) {
-                            let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: albumAssetCollection)
-                            let enumeration: NSArray = [assetChangeRequest.placeholderForCreatedAsset!]
-                            assetCollectionChangeRequest?.addAssets(enumeration)
-                        }
-                    }, completionHandler: { (success2: Bool, error2: Error?) in
-                    if success2 == true {
-                        // prompt that the video has been saved
-                        let alertController = UIAlertController(title: "Video Saved!", message: "Saved to the camera roll.", preferredStyle: .alert)
-                        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-                        alertController.addAction(okAction)
-                        self.present(alertController, animated: true, completion: nil)
-                    } else {
-                        // prompt that the video has been saved
-                        let alertController = UIAlertController(title: "Oops!", message: "Something failed!", preferredStyle: .alert)
-                        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-                        alertController.addAction(okAction)
-                        self.present(alertController, animated: true, completion: nil)
-                    }
-                })
-            }
-        })
     }
 }
 
-// MARK: - UIButton
+// MARK: - UIButton handlers
 
-extension CameraViewController {
-
+@available(iOS 11.0, *)
+extension MixedRealityViewController {
+    
     @objc internal func handleFlipButton(_ button: UIButton) {
-        NextLevel.shared.flipCaptureDevicePosition()
+//        NextLevel.shared.flipCaptureDevicePosition()
     }
-    
-    internal func handleFlashModeButton(_ button: UIButton) {
-    }
-    
+
     @objc internal func handleSaveButton(_ button: UIButton) {
         self.endCapture()
     }
@@ -320,8 +351,9 @@ extension CameraViewController {
 
 // MARK: - UIGestureRecognizerDelegate
 
-extension CameraViewController: UIGestureRecognizerDelegate {
-
+@available(iOS 11.0, *)
+extension MixedRealityViewController: UIGestureRecognizerDelegate {
+    
     @objc internal func handleLongPressGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
         switch gestureRecognizer.state {
         case .began:
@@ -346,39 +378,73 @@ extension CameraViewController: UIGestureRecognizerDelegate {
             break
         }
     }
-}
-
-extension CameraViewController {
-
-    internal func handlePhotoTapGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
+    
+    @objc internal func handlePhotoTapGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
         // play system camera shutter sound
         AudioServicesPlaySystemSoundWithCompletion(SystemSoundID(1108), nil)
         NextLevel.shared.capturePhotoFromVideo()
     }
     
-    @objc internal func handleFocusTapGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
-        let tapPoint = gestureRecognizer.location(in: self.previewView)
+}
 
-        if let focusView = self.focusView {
-            var focusFrame = focusView.frame
-            focusFrame.origin.x = CGFloat((tapPoint.x - (focusFrame.size.width * 0.5)).rounded())
-            focusFrame.origin.y = CGFloat((tapPoint.y - (focusFrame.size.height * 0.5)).rounded())
-            focusView.frame = focusFrame
-            
-            self.previewView?.addSubview(focusView)
-            focusView.startAnimation()
-        }
+// MARK: - gesture handlers
+
+@available(iOS 11.0, *)
+extension MixedRealityViewController {
+    
+    @objc internal func handleTapGestureRecognizer(_ gestureRecognizer: UIGestureRecognizer) {
+    }
+    
+}
+
+// MARK: - ARSCNViewDelegate
+
+@available(iOS 11.0, *)
+extension MixedRealityViewController: ARSCNViewDelegate {
+}
+
+// MARK: - ARSessionDelegate
+
+@available(iOS 11.0, *)
+extension MixedRealityViewController: ARSessionDelegate {
+    
+    public func session(_ session: ARSession, didFailWithError error: Error) {
+    }
+    
+    public func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
+    }
+
+    public func sessionWasInterrupted(_ session: ARSession) {
+        // hook in to NextLevel (allows your controller to be the delegate without multicasting)
+        NextLevel.shared.handleSessionWasInterrupted(Notification(name: Notification.Name("NextLevel")))
         
-        let adjustedPoint = NextLevel.shared.previewLayer.captureDevicePointConverted(fromLayerPoint: tapPoint)
-        NextLevel.shared.focusExposeAndAdjustWhiteBalance(atAdjustedPoint: adjustedPoint)
+    }
+    
+    public func sessionInterruptionEnded(_ session: ARSession) {
+        // hook in to NextLevel (allows your controller to be the delegate without multicasting)
+        NextLevel.shared.handleSessionInterruptionEnded(Notification(name: Notification.Name("NextLevel")))
+        
+    }
+
+    public func session(_ session: ARSession, didOutputAudioSampleBuffer audioSampleBuffer: CMSampleBuffer) {
+        // hook in to NextLevel (allows your controller to be the delegate without multicasting)
+        NextLevel.shared.arSession(session, didOutputAudioSampleBuffer:audioSampleBuffer)
+        
+    }
+
+    public func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // hook in to NextLevel (allows your controller to be the delegate without multicasting)
+        NextLevel.shared.arSession(session, didUpdate: frame)
+        
     }
     
 }
 
 // MARK: - NextLevelDelegate
 
-extension CameraViewController: NextLevelDelegate {
-
+@available(iOS 11.0, *)
+extension MixedRealityViewController: NextLevelDelegate {
+    
     // permission
     func nextLevel(_ nextLevel: NextLevel, didUpdateAuthorizationStatus status: NextLevelAuthorizationStatus, forMediaType mediaType: AVMediaType) {
         print("NextLevel, authorization updated for media \(mediaType) status \(status)")
@@ -431,19 +497,9 @@ extension CameraViewController: NextLevelDelegate {
     
 }
 
-extension CameraViewController: NextLevelPreviewDelegate {
+@available(iOS 11.0, *)
+extension MixedRealityViewController: NextLevelDeviceDelegate {
     
-    // preview
-    func nextLevelWillStartPreview(_ nextLevel: NextLevel) {
-    }
-    
-    func nextLevelDidStopPreview(_ nextLevel: NextLevel) {
-    }
-    
-}
-
-extension CameraViewController: NextLevelDeviceDelegate {
-
     // position, orientation
     func nextLevelDevicePositionWillChange(_ nextLevel: NextLevel) {
     }
@@ -467,22 +523,22 @@ extension CameraViewController: NextLevelDeviceDelegate {
     }
     
     func nextLevelDidStopFocus(_  nextLevel: NextLevel) {
-        if let focusView = self.focusView {
-            if focusView.superview != nil {
-                focusView.stopAnimation()
-            }
-        }
+//        if let focusView = self.focusView {
+//            if focusView.superview != nil {
+//                focusView.stopAnimation()
+//            }
+//        }
     }
     
     func nextLevelWillChangeExposure(_ nextLevel: NextLevel) {
     }
     
     func nextLevelDidChangeExposure(_ nextLevel: NextLevel) {
-        if let focusView = self.focusView {
-            if focusView.superview != nil {
-                focusView.stopAnimation()
-            }
-        }
+//        if let focusView = self.focusView {
+//            if focusView.superview != nil {
+//                focusView.stopAnimation()
+//            }
+//        }
     }
     
     func nextLevelWillChangeWhiteBalance(_ nextLevel: NextLevel) {
@@ -493,52 +549,33 @@ extension CameraViewController: NextLevelDeviceDelegate {
     
 }
 
-// MARK: - NextLevelFlashDelegate
-
-extension CameraViewController: NextLevelFlashAndTorchDelegate {
-    
-    func nextLevelDidChangeFlashMode(_ nextLevel: NextLevel) {
-    }
-    
-    func nextLevelDidChangeTorchMode(_ nextLevel: NextLevel) {
-    }
-    
-    func nextLevelFlashActiveChanged(_ nextLevel: NextLevel) {
-    }
-    
-    func nextLevelTorchActiveChanged(_ nextLevel: NextLevel) {
-    }
-    
-    func nextLevelFlashAndTorchAvailabilityChanged(_ nextLevel: NextLevel) {
-    }
-
-}
-
 // MARK: - NextLevelVideoDelegate
 
-extension CameraViewController: NextLevelVideoDelegate {
+@available(iOS 11.0, *)
+extension MixedRealityViewController: NextLevelVideoDelegate {
 
     // video zoom
     func nextLevel(_ nextLevel: NextLevel, didUpdateVideoZoomFactor videoZoomFactor: Float) {
     }
-
+    
     // video frame processing
     func nextLevel(_ nextLevel: NextLevel, willProcessRawVideoSampleBuffer sampleBuffer: CMSampleBuffer, onQueue queue: DispatchQueue) {
-    }
-    
-    @available(iOS 11.0, *)
-    func nextLevel(_ nextLevel: NextLevel, willProcessFrame frame: AnyObject, pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, onQueue queue: DispatchQueue) {
     }
     
     // enabled by isCustomContextVideoRenderingEnabled
     func nextLevel(_ nextLevel: NextLevel, renderToCustomContextWithImageBuffer imageBuffer: CVPixelBuffer, onQueue queue: DispatchQueue) {
     }
-    
+
+    func nextLevel(_ nextLevel: NextLevel, willProcessFrame frame: AnyObject, pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, onQueue queue: DispatchQueue) {
+    }
+
     // video recording session
     func nextLevel(_ nextLevel: NextLevel, didSetupVideoInSession session: NextLevelSession) {
+        print("setup video")
     }
     
     func nextLevel(_ nextLevel: NextLevel, didSetupAudioInSession session: NextLevelSession) {
+        print("setup audio")
     }
     
     func nextLevel(_ nextLevel: NextLevel, didStartClipInSession session: NextLevelSession) {
@@ -571,7 +608,7 @@ extension CameraViewController: NextLevelVideoDelegate {
     }
     
     // video frame photo
-
+    
     func nextLevel(_ nextLevel: NextLevel, didCompletePhotoCaptureFromVideoFrame photoDict: [String : Any]?) {
         
         if let dictionary = photoDict,
@@ -584,7 +621,7 @@ extension CameraViewController: NextLevelVideoDelegate {
                     let changeRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: NextLevelAlbumTitle)
                     let _ = changeRequest.placeholderForCreatedAssetCollection
                 }
-            
+                
             }, completionHandler: { (success1: Bool, error1: Error?) in
                 
                 if success1 == true {
@@ -611,94 +648,9 @@ extension CameraViewController: NextLevelVideoDelegate {
                 }
                 
             })
-        
+            
         }
         
     }
     
 }
-
-// MARK: - NextLevelPhotoDelegate
-
-extension CameraViewController: NextLevelPhotoDelegate {
-    
-    // photo
-    func nextLevel(_ nextLevel: NextLevel, willCapturePhotoWithConfiguration photoConfiguration: NextLevelPhotoConfiguration) {
-    }
-    
-    func nextLevel(_ nextLevel: NextLevel, didCapturePhotoWithConfiguration photoConfiguration: NextLevelPhotoConfiguration) {
-    }
-    
-    func nextLevel(_ nextLevel: NextLevel, didProcessPhotoCaptureWith photoDict: [String : Any]?, photoConfiguration: NextLevelPhotoConfiguration) {
-        
-        if let dictionary = photoDict,
-            let photoData = dictionary[NextLevelPhotoJPEGKey] {
-
-            PHPhotoLibrary.shared().performChanges({
-                
-                let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle)
-                if albumAssetCollection == nil {
-                    let changeRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: NextLevelAlbumTitle)
-                    let _ = changeRequest.placeholderForCreatedAssetCollection
-                }
-                
-            }, completionHandler: { (success1: Bool, error1: Error?) in
-                    
-                if success1 == true {
-                    if let albumAssetCollection = self.albumAssetCollection(withTitle: NextLevelAlbumTitle) {
-                        PHPhotoLibrary.shared().performChanges({
-                            if let data = photoData as? Data,
-                               let photoImage = UIImage(data: data) {
-                                let assetChangeRequest = PHAssetChangeRequest.creationRequestForAsset(from: photoImage)
-                                let assetCollectionChangeRequest = PHAssetCollectionChangeRequest(for: albumAssetCollection)
-                                let enumeration: NSArray = [assetChangeRequest.placeholderForCreatedAsset!]
-                                assetCollectionChangeRequest?.addAssets(enumeration)
-                            }
-                        }, completionHandler: { (success2: Bool, error2: Error?) in
-                            if success2 == true {
-                                let alertController = UIAlertController(title: "Photo Saved!", message: "Saved to the camera roll.", preferredStyle: .alert)
-                                let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-                                alertController.addAction(okAction)
-                                self.present(alertController, animated: true, completion: nil)
-                            }
-                        })
-                    }
-                } else if let _ = error1 {
-                    print("failure capturing photo from video frame \(String(describing: error1))")
-                }
-                    
-            })
-        }
-        
-    }
-    
-    func nextLevel(_ nextLevel: NextLevel, didProcessRawPhotoCaptureWith photoDict: [String : Any]?, photoConfiguration: NextLevelPhotoConfiguration) {
-    }
-
-    func nextLevelDidCompletePhotoCapture(_ nextLevel: NextLevel) {
-    }
-    
-}
-
-// MARK: - KVO
-
-private var CameraViewControllerNextLevelCurrentDeviceObserverContext = "CameraViewControllerNextLevelCurrentDeviceObserverContext"
-
-extension CameraViewController {
-    
-    internal func addKeyValueObservers() {
-        self.addObserver(self, forKeyPath: "currentDevice", options: [.new], context: &CameraViewControllerNextLevelCurrentDeviceObserverContext)
-    }
-    
-    internal func removeKeyValueObservers() {
-        self.removeObserver(self, forKeyPath: "currentDevice")
-    }
-    
-    override public func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if context == &CameraViewControllerNextLevelCurrentDeviceObserverContext {
-            //self.captureDeviceDidChange()
-        }
-    }
-    
-}
-

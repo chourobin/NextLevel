@@ -30,6 +30,7 @@ import CoreImage
 import CoreVideo
 import ImageIO
 import Metal
+import ARKit
 
 // MARK: - types
 
@@ -126,6 +127,7 @@ public enum NextLevelCaptureMode: Int, CustomStringConvertible {
     case photo
     case audio
     case videoWithoutAudio
+    case arKit
     
     public var description: String {
         get {
@@ -138,6 +140,8 @@ public enum NextLevelCaptureMode: Int, CustomStringConvertible {
                 return "Photo"
             case .audio:
                 return "Audio"
+            case .arKit:
+                return "ARKit"
             }
         }
     }
@@ -442,13 +446,18 @@ public protocol NextLevelDelegate: NSObjectProtocol {
     func nextLevelSessionWasInterrupted(_ nextLevel: NextLevel)
     func nextLevelSessionInterruptionEnded(_ nextLevel: NextLevel)
     
-    // preview
-    func nextLevelWillStartPreview(_ nextLevel: NextLevel)
-    func nextLevelDidStopPreview(_ nextLevel: NextLevel)
-    
     // mode
     func nextLevelCaptureModeWillChange(_ nextLevel: NextLevel)
     func nextLevelCaptureModeDidChange(_ nextLevel: NextLevel)
+}
+
+/// Preview delegate, provides update for
+public protocol NextLevelPreviewDelegate: NSObjectProtocol {
+
+    // preview
+    func nextLevelWillStartPreview(_ nextLevel: NextLevel)
+    func nextLevelDidStopPreview(_ nextLevel: NextLevel)
+
 }
 
 /// Device delegate, provides updates on device position, orientation, clean aperture, focus, exposure, and white balances changes.
@@ -504,19 +513,29 @@ public protocol NextLevelVideoDelegate: NSObjectProtocol {
     // video processing
     func nextLevel(_ nextLevel: NextLevel, willProcessRawVideoSampleBuffer sampleBuffer: CMSampleBuffer, onQueue queue: DispatchQueue)
     func nextLevel(_ nextLevel: NextLevel, renderToCustomContextWithImageBuffer imageBuffer: CVPixelBuffer, onQueue queue: DispatchQueue)
-    
+
+    // ARKit video processing
+    @available(iOS 11.0, *)
+    func nextLevel(_ nextLevel: NextLevel, willProcessFrame frame: AnyObject, pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, onQueue queue: DispatchQueue)
+
     // video recording session
     func nextLevel(_ nextLevel: NextLevel, didSetupVideoInSession session: NextLevelSession)
     func nextLevel(_ nextLevel: NextLevel, didSetupAudioInSession session: NextLevelSession)
     
+    // clip start/stop
     func nextLevel(_ nextLevel: NextLevel, didStartClipInSession session: NextLevelSession)
     func nextLevel(_ nextLevel: NextLevel, didCompleteClip clip: NextLevelClip, inSession session: NextLevelSession)
     
+    // clip file I/O
     func nextLevel(_ nextLevel: NextLevel, didAppendVideoSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
-    func nextLevel(_ nextLevel: NextLevel, didAppendAudioSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
     func nextLevel(_ nextLevel: NextLevel, didSkipVideoSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
-    func nextLevel(_ nextLevel: NextLevel, didSkipAudioSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
+
+    func nextLevel(_ nextLevel: NextLevel, didAppendVideoPixelBuffer pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, inSession session: NextLevelSession)
+    func nextLevel(_ nextLevel: NextLevel, didSkipVideoPixelBuffer pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, inSession session: NextLevelSession)
     
+    func nextLevel(_ nextLevel: NextLevel, didAppendAudioSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
+    func nextLevel(_ nextLevel: NextLevel, didSkipAudioSampleBuffer sampleBuffer: CMSampleBuffer, inSession session: NextLevelSession)
+
     func nextLevel(_ nextLevel: NextLevel, didCompleteSession session: NextLevelSession)
     
     // video frame photo
@@ -553,6 +572,7 @@ public class NextLevel: NSObject {
     // delegates
     
     public weak var delegate: NextLevelDelegate?
+    public weak var previewDelegate: NextLevelPreviewDelegate?
     public weak var deviceDelegate: NextLevelDeviceDelegate?
     public weak var flashDelegate: NextLevelFlashAndTorchDelegate?
     public weak var videoDelegate: NextLevelVideoDelegate?
@@ -565,19 +585,27 @@ public class NextLevel: NSObject {
     
     // capture configuration
     
-    /// Configuration property to modify for video
+    /// Configuration for video
     public var videoConfiguration: NextLevelVideoConfiguration
     
-    /// Configuration property to modify for audio
+    /// Configuration for audio
     public var audioConfiguration: NextLevelAudioConfiguration
     
-    /// Configuration property to modify for photos
+    /// Configuration for photos
     public var photoConfiguration: NextLevelPhotoConfiguration
+    
+    @available(iOS 11.0, *)
+    /// Configuration property for augmented reality
+    public var arConfiguration: NextLevelARConfiguration? {
+        get {
+            return self._arConfiguration as? NextLevelARConfiguration
+        }
+    }
     
     // audio configuration
     
     /// Indicates whether the capture session automatically changes settings in the app’s shared audio session. By default, is `true`.
-    public var automaticallyConfiguresApplicationAudioSession: Bool
+    public var automaticallyConfiguresApplicationAudioSession: Bool = true
     
     // camera configuration
     
@@ -590,7 +618,7 @@ public class NextLevel: NSObject {
     }
     
     /// The current capture mode of the device.
-    public var captureMode: NextLevelCaptureMode {
+    public var captureMode: NextLevelCaptureMode = .video {
         didSet {
             guard
                 self.captureMode != oldValue
@@ -602,12 +630,16 @@ public class NextLevel: NSObject {
                 self.configureSession()
                 self.configureSessionDevices()
                 self.updateVideoOrientation()
+                
+                if self.captureMode == .arKit {
+                    self.setupContextIfNecessary()
+                }
             }
         }
     }
     
     /// The current device position.
-    public var devicePosition: NextLevelDevicePosition {
+    public var devicePosition: NextLevelDevicePosition = .back {
         didSet {
             self.executeClosureAsyncOnSessionQueueIfNecessary {
                 self.configureSessionDevices()
@@ -617,10 +649,10 @@ public class NextLevel: NSObject {
     }
     
     /// When `true` actives device orientation updates
-    public var automaticallyUpdatesDeviceOrientation: Bool
+    public var automaticallyUpdatesDeviceOrientation: Bool = false
     
     /// The current orientation of the device.
-    public var deviceOrientation: NextLevelDeviceOrientation {
+    public var deviceOrientation: NextLevelDeviceOrientation = .portrait {
         didSet {
             self.automaticallyUpdatesDeviceOrientation = false
             self.updateVideoOrientation()
@@ -630,10 +662,10 @@ public class NextLevel: NSObject {
     // stabilization
     
     /// When `true`, enables photo capture stabilization.
-    public var photoStabilizationEnabled: Bool
+    public var photoStabilizationEnabled: Bool = false
     
     /// Video stabilization mode
-    public var videoStabilizationMode: NextLevelVideoStabilizationMode {
+    public var videoStabilizationMode: NextLevelVideoStabilizationMode = .auto {
         didSet {
             self.executeClosureAsyncOnSessionQueueIfNecessary {
                 self.beginConfiguration()
@@ -655,6 +687,11 @@ public class NextLevel: NSObject {
     /// Checks if the current capture session is running
     public var isRunning: Bool {
         get {
+            if #available(iOS 11.0, *) {
+                if self.captureMode == .arKit {
+                    return self._arRunning
+                }
+            }
             if let session = self._captureSession {
                 return session.isRunning
             }
@@ -672,9 +709,25 @@ public class NextLevel: NSObject {
     
     // MARK: - private instance vars
     
-    internal var _captureSession: AVCaptureSession?
     internal var _sessionQueue: DispatchQueue
-    internal var _sessionConfigurationCount: Int
+    internal var _sessionConfigurationCount: Int = 0
+    
+    internal var _recording: Bool = false
+    internal var _recordingSession: NextLevelSession?
+    internal var _lastVideoFrameTimeInterval: TimeInterval = 0
+    
+    internal var _videoCustomContextRenderingEnabled: Bool = false
+    internal var _sessionVideoCustomContextImageBuffer: CVPixelBuffer?
+    internal var _ciContext: CIContext?
+    
+    internal var _pixelBufferPool: CVPixelBufferPool?
+    internal var _bufferWidth: Int = 0
+    internal var _bufferHeight: Int = 0
+    internal var _bufferFormatType: OSType = OSType(kCVPixelFormatType_32BGRA)
+    
+    // AVFoundation
+    
+    internal var _captureSession: AVCaptureSession?
     
     internal var _videoInput: AVCaptureDeviceInput?
     internal var _audioInput: AVCaptureDeviceInput?
@@ -689,13 +742,12 @@ public class NextLevel: NSObject {
     internal var _lastVideoFrame: CMSampleBuffer?
     internal var _lastAudioFrame: CMSampleBuffer?
     
-    internal var _recording: Bool
-    internal var _recordingSession: NextLevelSession?
-    internal var _lastVideoFrameTimeInterval: TimeInterval
+    // ARKit
     
-    internal var _videoCustomContextRenderingEnabled: Bool
-    internal var _sessionVideoCustomContextImageBuffer: CVPixelBuffer?
-    internal var _ciContext: CIContext?
+    internal var _arRunning: Bool = false
+    internal var _arConfiguration: NextLevelConfiguration?
+    
+    internal var _lastARFrame: CVPixelBuffer?
     
     // MARK: - singleton
     
@@ -710,26 +762,13 @@ public class NextLevel: NSObject {
         
         self._sessionQueue = DispatchQueue(label: NextLevelCaptureSessionIdentifier, qos: .userInteractive, target: DispatchQueue.global())
         self._sessionQueue.setSpecific(key: NextLevelCaptureSessionSpecificKey, value: self._sessionQueue)
-        self._sessionConfigurationCount = 0
         
         self.videoConfiguration = NextLevelVideoConfiguration()
         self.audioConfiguration = NextLevelAudioConfiguration()
         self.photoConfiguration = NextLevelPhotoConfiguration()
-        
-        self.captureMode = .video
-        
-        self.photoStabilizationEnabled = false
-        self.videoStabilizationMode = .auto
-        self._videoCustomContextRenderingEnabled = false
-        
-        self._recording = false
-        self._lastVideoFrameTimeInterval = 0
-        
-        self.automaticallyConfiguresApplicationAudioSession = true
-        self.automaticallyUpdatesDeviceOrientation = false
-        
-        self.devicePosition = .back
-        self.deviceOrientation = .portrait
+        if #available(iOS 11.0, *) {
+            self._arConfiguration = NextLevelARConfiguration()
+        }
         
         super.init()
         
@@ -740,6 +779,7 @@ public class NextLevel: NSObject {
     
     deinit {
         self.delegate = nil
+        self.previewDelegate = nil
         self.deviceDelegate = nil
         self.flashDelegate = nil
         self.videoDelegate = nil
@@ -808,6 +848,8 @@ extension NextLevel {
             return self.authorizationStatus(forMediaType: AVMediaType.audio)
         case .videoWithoutAudio:
             return self.authorizationStatus(forMediaType: AVMediaType.video)
+        case .arKit:
+            fallthrough
         case .video:
             let audioStatus = self.authorizationStatus(forMediaType: AVMediaType.audio)
             let videoStatus = self.authorizationStatus(forMediaType: AVMediaType.video)
@@ -836,6 +878,49 @@ extension NextLevel {
             throw NextLevelError.authorization
         }
         
+        if self.captureMode == .arKit {
+            if #available(iOS 11.0, *) {
+                setupARSession()
+            }
+        } else {
+            setupAVSession()
+        }
+    }
+    
+    /// Stops the current recording session.
+    public func stop() {
+        if let session = self._captureSession {
+            self.executeClosureAsyncOnSessionQueueIfNecessary {
+                if session.isRunning == true {
+                    session.stopRunning()
+                }
+                
+                self.beginConfiguration()
+                self.removeInputs(session: session)
+                self.removeOutputs(session: session)
+                self.commitConfiguration()
+                
+                self._recordingSession = nil
+                self._captureSession = nil
+                self._currentDevice = nil
+            }
+        }
+        
+        if self.captureMode == .arKit {
+            if #available(iOS 11.0, *) {
+                self.executeClosureAsyncOnSessionQueueIfNecessary {
+                    if self._arRunning == true {
+                        self.arConfiguration?.session?.pause()
+                        self._arRunning = false
+                        
+                        self._recordingSession = nil
+                    }
+                }
+            }
+        }
+    }
+    
+    internal func setupAVSession() {
         // Note: use nextLevelSessionDidStart to ensure a device and session are available for configuration or format changes
         self.executeClosureAsyncOnSessionQueueIfNecessary {
             // setup AV capture sesssion
@@ -872,27 +957,45 @@ extension NextLevel {
                 if session.isRunning == false {
                     self.delegate?.nextLevelSessionWillStart(self)
                     session.startRunning()
+                    self.previewDelegate?.nextLevelWillStartPreview(self)
+                    
+                    // nextLevelSessionDidStart is called from AVFoundation
                 }
             }
         }
     }
     
-    /// Stops the current recording session.
-    public func stop() {
-        if let session = self._captureSession {
-            self.executeClosureAsyncOnSessionQueueIfNecessary {
-                if session.isRunning == true {
-                    session.stopRunning()
+    @available(iOS 11.0, *)
+    internal func setupARSession() {
+        self.executeClosureAsyncOnSessionQueueIfNecessary {
+            if let config = self.arConfiguration?.config,
+                let options = self.arConfiguration?.runOptions {
+                self._captureSession = AVCaptureSession() // AV session is needed for device management and configuration
+                self._sessionConfigurationCount = 0
+
+                // setup NL recording session
+                self._recordingSession = NextLevelSession(queue: self._sessionQueue, queueKey: NextLevelCaptureSessionSpecificKey)
+                self.arConfiguration?.session?.delegateQueue = self._sessionQueue
+                
+                if let session = self._captureSession {
+                    session.automaticallyConfiguresApplicationAudioSession = self.automaticallyConfiguresApplicationAudioSession
+                    
+                    self.beginConfiguration()
+                    self.configureSession()
+                    self.configureSessionDevices()
+                    self.updateVideoOrientation()
+                    self.commitConfiguration()
                 }
                 
-                self.beginConfiguration()
-                self.removeInputs(session: session)
-                self.removeOutputs(session: session)
-                self.commitConfiguration()
-                
-                self._recordingSession = nil
-                self._captureSession = nil
-                self._currentDevice = nil
+                if self._arRunning == false {
+                    self.delegate?.nextLevelSessionWillStart(self)
+                    self.arConfiguration?.session?.run(config, options: options)
+                    self._arRunning = true
+                    
+                    self.executeClosureAsyncOnMainQueueIfNecessary {
+                        self.delegate?.nextLevelSessionDidStart(self)
+                    }
+                }
             }
         }
     }
@@ -923,80 +1026,84 @@ extension NextLevel {
     }
     
     internal func configureSessionDevices() {
-        if self._captureSession != nil {
+        guard self._captureSession != nil else {
+            return
+        }
+        
+        self.beginConfiguration()
+        
+        var shouldConfigureVideo = false
+        var shouldConfigureAudio = false
+        switch self.captureMode {
+        case .photo:
+            shouldConfigureVideo = true
+            break
+        case .audio:
+            shouldConfigureAudio = true
+            break
+        case .video:
+            shouldConfigureVideo = true
+            shouldConfigureAudio = true
+            break
+        case .videoWithoutAudio:
+            shouldConfigureVideo = true
+            break
+        case .arKit:
+            shouldConfigureVideo = true
+            break
+        }
+        
+        if shouldConfigureVideo == true {
+            var captureDevice: AVCaptureDevice? = nil
             
-            self.beginConfiguration()
-            
-            var shouldConfigureVideo = false
-            var shouldConfigureAudio = false
-            switch self.captureMode {
-            case .photo:
-                shouldConfigureVideo = true
-                break
-            case .audio:
-                shouldConfigureAudio = true
-                break
-            case .video:
-                shouldConfigureVideo = true
-                shouldConfigureAudio = true
-                break
-            case .videoWithoutAudio:
-                shouldConfigureVideo = true
-                break
+            if let requestedDevice = self._requestedDevice {
+                captureDevice = requestedDevice
+            } else if let videoDevice = AVCaptureDevice.primaryVideoDevice(forPosition: self.devicePosition.avfoundationType) {
+                captureDevice = videoDevice
             }
             
-            if shouldConfigureVideo == true {
-                var captureDevice: AVCaptureDevice? = nil
-                
-                if let requestedDevice = self._requestedDevice {
-                    captureDevice = requestedDevice
-                } else if let videoDevice = AVCaptureDevice.primaryVideoDevice(forPosition: self.devicePosition.avfoundationType) {
-                    captureDevice = videoDevice
-                }
-                
-                if let device = captureDevice {
-                    if device != self._currentDevice {
-                        self.configureDevice(captureDevice: device, mediaType: AVMediaType.video)
-                        
-                        let changingPosition = device.position != self._currentDevice?.position
-                        if changingPosition == true {
-                            self.executeClosureAsyncOnMainQueueIfNecessary {
-                                self.deviceDelegate?.nextLevelDevicePositionWillChange(self)
-                            }
+            if let captureDevice = captureDevice {
+                if captureDevice != self._currentDevice {
+                    self.configureDevice(captureDevice: captureDevice, mediaType: AVMediaType.video)
+                    
+                    let changingPosition = captureDevice.position != self._currentDevice?.position
+                    if changingPosition == true {
+                        self.executeClosureAsyncOnMainQueueIfNecessary {
+                            self.deviceDelegate?.nextLevelDevicePositionWillChange(self)
                         }
-                        
-                        self.willChangeValue(forKey: "currentDevice")
-                        self._currentDevice = device
-                        self.didChangeValue(forKey: "currentDevice")
-                        self._requestedDevice = nil
-                        
-                        if changingPosition == true {
-                            self.executeClosureAsyncOnMainQueueIfNecessary {
-                                self.deviceDelegate?.nextLevelDevicePositionDidChange(self)
-                            }
+                    }
+                    
+                    self.willChangeValue(forKey: "currentDevice")
+                    self._currentDevice = captureDevice
+                    self.didChangeValue(forKey: "currentDevice")
+                    self._requestedDevice = nil
+                    
+                    if changingPosition == true {
+                        self.executeClosureAsyncOnMainQueueIfNecessary {
+                            self.deviceDelegate?.nextLevelDevicePositionDidChange(self)
                         }
                     }
                 }
             }
-            
-            if shouldConfigureAudio == true {
-                if let audioDevice = AVCaptureDevice.audioDevice() {
-                    self.configureDevice(captureDevice: audioDevice, mediaType: AVMediaType.audio)
-                }
+        }
+        
+        if shouldConfigureAudio == true {
+            if let audioDevice = AVCaptureDevice.audioDevice() {
+                self.configureDevice(captureDevice: audioDevice, mediaType: AVMediaType.audio)
             }
-            
-            self.commitConfiguration()
-            
-            if shouldConfigureVideo == true {
-                self.executeClosureAsyncOnMainQueueIfNecessary {
-                    self.delegate?.nextLevel(self, didUpdateVideoConfiguration: self.videoConfiguration)
-                }
+        }
+        
+        self.commitConfiguration()
+        
+        if shouldConfigureVideo == true {
+            self.executeClosureAsyncOnMainQueueIfNecessary {
+                self.delegate?.nextLevel(self, didUpdateVideoConfiguration: self.videoConfiguration)
             }
-            
-            if shouldConfigureAudio == true {
-                self.executeClosureAsyncOnMainQueueIfNecessary {
-                    self.delegate?.nextLevel(self, didUpdateAudioConfiguration: self.audioConfiguration)
-                }
+        }
+        
+        if shouldConfigureAudio == true {
+            self.executeClosureAsyncOnMainQueueIfNecessary {
+                self.delegate?.nextLevel(self, didUpdateAudioConfiguration: self.audioConfiguration)
             }
         }
     }
@@ -1045,6 +1152,9 @@ extension NextLevel {
                 break
             case .audio:
                 let _ = self.addAudioOuput()
+                break
+            case .arKit:
+                // no AV inputs to setup
                 break
             }
             
@@ -1234,43 +1344,50 @@ extension NextLevel {
                 session.removeOutput(photoOutput)
                 self._photoOutput = nil
             }
-            
             break
         case .videoWithoutAudio:
             if let photoOutput = self._photoOutput, session.outputs.contains(photoOutput) {
                 session.removeOutput(photoOutput)
                 self._photoOutput = nil
             }
-            
             if let audioOutput = self._audioOutput, session.outputs.contains(audioOutput) {
                 session.removeOutput(audioOutput)
                 self._audioOutput = nil
             }
-            
             break
         case .photo:
             if let videoOutput = self._videoOutput, session.outputs.contains(videoOutput) {
                 session.removeOutput(videoOutput)
                 self._videoOutput = nil
             }
-            
             if let audioOutput = self._audioOutput, session.outputs.contains(audioOutput) {
                 session.removeOutput(audioOutput)
                 self._audioOutput = nil
             }
-            
             break
         case .audio:
             if let videoOutput = self._videoOutput, session.outputs.contains(videoOutput) {
                 session.removeOutput(videoOutput)
                 self._videoOutput = nil
             }
-            
             if let photoOutput = self._photoOutput, session.outputs.contains(photoOutput) {
                 session.removeOutput(photoOutput)
                 self._photoOutput = nil
             }
-            
+            break
+        case .arKit:
+            if let videoOutput = self._videoOutput, session.outputs.contains(videoOutput) {
+                session.removeOutput(videoOutput)
+                self._videoOutput = nil
+            }
+            if let audioOutput = self._audioOutput, session.outputs.contains(audioOutput) {
+                session.removeOutput(audioOutput)
+                self._audioOutput = nil
+            }
+            if let photoOutput = self._photoOutput, session.outputs.contains(photoOutput) {
+                session.removeOutput(photoOutput)
+                self._photoOutput = nil
+            }
             break
         }
         
@@ -2048,13 +2165,13 @@ extension NextLevel {
     /// Updates video capture zoom factor.
     public var videoZoomFactor: Float {
         get {
-            if let device: AVCaptureDevice = self._currentDevice {
+            if let device = self._currentDevice {
                 return Float(device.videoZoomFactor)
             }
             return 1.0 // prefer 1.0 instead of using an optional
         }
         set {
-            if let device: AVCaptureDevice = self._currentDevice {
+            if let device = self._currentDevice {
                 do {
                     try device.lockForConfiguration()
                     
@@ -2062,8 +2179,7 @@ extension NextLevel {
                     device.videoZoomFactor = CGFloat(zoom)
                     
                     device.unlockForConfiguration()
-                }
-                catch {
+                } catch {
                     print("NextLevel, zoomFactor failed to lock device for configuration")
                 }
             }
@@ -2083,28 +2199,27 @@ extension NextLevel {
                 return
             }
             
+            var buffer: CVPixelBuffer? = nil
+            if let videoFrame = self._lastVideoFrame,
+                let imageBuffer = CMSampleBufferGetImageBuffer(videoFrame) {
+                buffer = imageBuffer
+            } else if let arFrame = self._lastARFrame {
+                buffer = arFrame
+            }
+
             if self.isVideoCustomContextRenderingEnabled {
-                if let videoFrame = self._lastVideoFrame,
-                    let bufferRef = CMSampleBufferGetImageBuffer(videoFrame) {
-                    if CVPixelBufferLockBaseAddress(bufferRef, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess {
+                if let buffer = buffer {
+                    if CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess {
                         // only called from captureQueue, populates self._sessionVideoCustomContextImageBuffer
-                        self.videoDelegate?.nextLevel(self, renderToCustomContextWithImageBuffer: bufferRef, onQueue: self._sessionQueue)
-                        CVPixelBufferUnlockBaseAddress(bufferRef, CVPixelBufferLockFlags(rawValue: 0))
+                        self.videoDelegate?.nextLevel(self, renderToCustomContextWithImageBuffer: buffer, onQueue: self._sessionQueue)
+                        CVPixelBufferUnlockBaseAddress(buffer, CVPixelBufferLockFlags(rawValue: 0))
                     }
                 }
             }
             
             // create a render context
             
-            if self._ciContext == nil {
-                let options : [String : AnyObject] = [kCIContextWorkingColorSpace : CGColorSpaceCreateDeviceRGB(),
-                                                      kCIContextUseSoftwareRenderer : NSNumber(booleanLiteral: false)]
-                if let device = MTLCreateSystemDefaultDevice() {
-                    self._ciContext = CIContext(mtlDevice: device, options: options)
-                } else if let eaglContext = EAGLContext(api: .openGLES2) {
-                    self._ciContext = CIContext(eaglContext: eaglContext, options: options)
-                }
-            }
+            self.setupContextIfNecessary()
             
             var photoDict: [String: Any]? = nil
             if let customFrame = self._sessionVideoCustomContextImageBuffer {
@@ -2144,6 +2259,20 @@ extension NextLevel {
                     photoDict?[NextLevelPhotoJPEGKey] = imageData
                 }
                 
+            } else if let arFrame = self._lastARFrame {
+                
+                // TODO append exif metadata
+                
+                // add JPEG, thumbnail
+                if let context = self._ciContext,
+                    let photo = context.uiimage(withPixelBuffer: arFrame),
+                    let imageData = UIImageJPEGRepresentation(photo, 1) {
+                    
+                    if photoDict == nil {
+                        photoDict = [:]
+                    }
+                    photoDict?[NextLevelPhotoJPEGKey] = imageData
+                }
             }
             
             // TODO, if photoDict?[NextLevelPhotoJPEGKey]
@@ -2290,7 +2419,7 @@ extension NextLevel {
     
     internal func handleVideoOutput(sampleBuffer: CMSampleBuffer, session: NextLevelSession) {
         if session.isVideoReady == false {
-            if let settings = self.videoConfiguration.avcaptureSettingsDictionary(withSampleBuffer: sampleBuffer),
+            if let settings = self.videoConfiguration.avcaptureSettingsDictionary(sampleBuffer: sampleBuffer),
                 let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) {
                 if !session.setupVideo(withSettings: settings, configuration: self.videoConfiguration, formatDescription: formatDescription) {
                     print("NextLevel, could not setup video session")
@@ -2314,23 +2443,21 @@ extension NextLevel {
                 
                 // check with the client to setup/maintain external render contexts
                 let imageBuffer = self.isVideoCustomContextRenderingEnabled == true ? CMSampleBufferGetImageBuffer(sampleBuffer) : nil
-                
-                if let bufferRef = imageBuffer {
-                    if CVPixelBufferLockBaseAddress(bufferRef, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess {
+                if let imageBuffer = imageBuffer {
+                    if CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess {
                         // only called from captureQueue
-                        self.videoDelegate?.nextLevel(self, renderToCustomContextWithImageBuffer: bufferRef, onQueue: self._sessionQueue)
+                        self.videoDelegate?.nextLevel(self, renderToCustomContextWithImageBuffer: imageBuffer, onQueue: self._sessionQueue)
                     } else {
                         self._sessionVideoCustomContextImageBuffer = nil
                     }
                 }
                 
                 // when clients modify a frame using their rendering context, the resulting CVPixelBuffer is then passed in here with the original sampleBuffer for recording
-                let minFrameDuration = device.activeVideoMinFrameDuration
-                session.appendVideo(withSampleBuffer: sampleBuffer, imageBuffer: self._sessionVideoCustomContextImageBuffer, minFrameDuration: minFrameDuration, completionHandler: { (success: Bool) -> Void in
+                session.appendVideo(withSampleBuffer: sampleBuffer, customImageBuffer: self._sessionVideoCustomContextImageBuffer, minFrameDuration: device.activeVideoMinFrameDuration, completionHandler: { (success: Bool) -> Void in
                     // cleanup client rendering context
                     if self.isVideoCustomContextRenderingEnabled {
-                        if let bufferRef = imageBuffer {
-                            CVPixelBufferUnlockBaseAddress(bufferRef, CVPixelBufferLockFlags(rawValue: 0))
+                        if let imageBuffer = imageBuffer {
+                            CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
                         }
                     }
                     
@@ -2363,10 +2490,78 @@ extension NextLevel {
         }
     }
     
+    // Beta: handleVideoOutput(pixelBuffer:timestamp:session:) needs to be tested
+    internal func handleVideoOutput(pixelBuffer: CVPixelBuffer, timestamp: TimeInterval, session: NextLevelSession) {
+        if session.isVideoReady == false {
+            if let settings = self.videoConfiguration.avcaptureSettingsDictionary(pixelBuffer: pixelBuffer) {
+                if !session.setupVideo(withSettings: settings, configuration: self.videoConfiguration) {
+                    print("NextLevel, could not setup video session")
+                }
+            }
+            self.executeClosureAsyncOnMainQueueIfNecessary {
+                self.videoDelegate?.nextLevel(self, didSetupVideoInSession: session)
+            }
+        }
+
+        if self._recording && (session.isAudioReady || self.captureMode == .videoWithoutAudio) && session.clipStarted {
+            self.beginRecordingNewClipIfNecessary()
+
+            let minTimeBetweenFrames = 0.004
+            let sleepDuration = minTimeBetweenFrames - (CACurrentMediaTime() - self._lastVideoFrameTimeInterval)
+            if sleepDuration > 0 {
+                Thread.sleep(forTimeInterval: sleepDuration)
+            }
+
+            // check with the client to setup/maintain external render contexts
+            let imageBuffer = self.isVideoCustomContextRenderingEnabled == true ? pixelBuffer : nil
+            if let imageBuffer = imageBuffer {
+                if CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess {
+                    // only called from captureQueue
+                    self.videoDelegate?.nextLevel(self, renderToCustomContextWithImageBuffer: imageBuffer, onQueue: self._sessionQueue)
+                } else {
+                    self._sessionVideoCustomContextImageBuffer = nil
+                }
+            }
+
+            // when clients modify a frame using their rendering context, the resulting CVPixelBuffer is then passed in here with the original sampleBuffer for recording
+            session.appendVideo(withPixelBuffer: pixelBuffer, customImageBuffer: self._sessionVideoCustomContextImageBuffer, timestamp: timestamp, minFrameDuration: CMTime(seconds: 1, preferredTimescale: 600), completionHandler: { (success: Bool) -> Void in
+                // cleanup client rendering context
+                if self.isVideoCustomContextRenderingEnabled {
+                    if let imageBuffer = imageBuffer {
+                        CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
+                    }
+                }
+
+                // process frame
+                self._lastVideoFrameTimeInterval = CACurrentMediaTime()
+                if success == true {
+                    self.executeClosureAsyncOnMainQueueIfNecessary {
+                        self.videoDelegate?.nextLevel(self, didAppendVideoPixelBuffer: pixelBuffer, timestamp: timestamp, inSession: session)
+                    }
+                    self.checkSessionDuration()
+                } else {
+                    self.executeClosureAsyncOnMainQueueIfNecessary {
+                        self.videoDelegate?.nextLevel(self, didSkipVideoPixelBuffer: pixelBuffer, timestamp: timestamp, inSession: session)
+                    }
+                }
+            })
+
+            if session.currentClipHasVideo == false && (session.currentClipHasAudio == false || self.captureMode == .videoWithoutAudio) {
+                if let audioBuffer = self._lastAudioFrame {
+                    let lastAudioEndTime = CMTimeAdd(CMSampleBufferGetPresentationTimeStamp(audioBuffer), CMSampleBufferGetDuration(audioBuffer))
+                    let videoStartTime = CMTime(seconds: timestamp, preferredTimescale: 600)
+
+                    if lastAudioEndTime > videoStartTime {
+                        self.handleAudioOutput(sampleBuffer: audioBuffer, session: session)
+                    }
+                }
+            }
+        }
+    }
     
     internal func handleAudioOutput(sampleBuffer: CMSampleBuffer, session: NextLevelSession) {
         if session.isAudioReady == false {
-            if let settings = self.audioConfiguration.avcaptureSettingsDictionary(withSampleBuffer: sampleBuffer),
+            if let settings = self.audioConfiguration.avcaptureSettingsDictionary(sampleBuffer: sampleBuffer),
                 let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) {
                 if !session.setupAudio(withSettings: settings, configuration: self.audioConfiguration, formatDescription: formatDescription) {
                     print("NextLevel, could not setup audio session")
@@ -2418,6 +2613,51 @@ extension NextLevel {
                     })
                 }
             }
+        }
+    }
+    
+    private func setupContextIfNecessary() {
+        if self._ciContext == nil {
+            let options : [String : AnyObject] = [kCIContextWorkingColorSpace : CGColorSpaceCreateDeviceRGB(),
+                                                  kCIContextUseSoftwareRenderer : NSNumber(booleanLiteral: false)]
+            if let device = MTLCreateSystemDefaultDevice() {
+                self._ciContext = CIContext(mtlDevice: device, options: options)
+            } else if let eaglContext = EAGLContext(api: .openGLES2) {
+                self._ciContext = CIContext(eaglContext: eaglContext, options: options)
+            }
+        }
+    }
+    
+    private func setupPixelBufferPoolIfNecessary(_ pixelBuffer: CVPixelBuffer) {
+        let formatType = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        
+        guard self._pixelBufferPool == nil ||
+              width != self._bufferWidth ||
+              height != self._bufferHeight ||
+              formatType != self._bufferFormatType
+        else {
+            return
+        }
+        
+        self._bufferWidth = width
+        self._bufferHeight = height
+        self._bufferFormatType = formatType
+        
+        let pixelBufferPoolMinimumCount = 3
+        let poolAttributes: [String:AnyObject] = [String(kCVPixelBufferPoolMinimumBufferCountKey): NSNumber(integerLiteral: pixelBufferPoolMinimumCount)]
+        
+        // TODO: doesn't properly support orientation, should reference videoConfiguration settings
+        let pixelBufferAttributes: [String:AnyObject] = [String(kCVPixelBufferPixelFormatTypeKey) : NSNumber(integerLiteral: Int(self._bufferFormatType)),
+                                                         String(kCVPixelBufferWidthKey) : NSNumber(value: self._bufferHeight), // flip
+                                                         String(kCVPixelBufferHeightKey) : NSNumber(value: self._bufferWidth), // flip
+                                                         String(kCVPixelBufferMetalCompatibilityKey) : NSNumber(booleanLiteral: true),
+                                                         String(kCVPixelBufferIOSurfacePropertiesKey) : [:] as AnyObject ]
+        
+        var pixelBufferPool: CVPixelBufferPool? = nil
+        if CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttributes as CFDictionary, pixelBufferAttributes as CFDictionary, &pixelBufferPool) == kCVReturnSuccess {
+            self._pixelBufferPool = pixelBufferPool
         }
     }
     
@@ -2549,6 +2789,39 @@ extension NextLevel: AVCapturePhotoCaptureDelegate {
     
 }
 
+// MARK: - ARSession
+
+@available(iOS 11.0, *)
+extension NextLevel {
+   
+    public func arSession(_ session: ARSession, didUpdate frame: ARFrame) {
+        var pixelBuffer = frame.capturedImage
+        let timestamp = frame.timestamp
+
+        // TODO: support orientation changes, maybe use snapshot API instead
+        self.setupPixelBufferPoolIfNecessary(pixelBuffer)
+        if let pixelBufferPool = self._pixelBufferPool,
+            let adjustedPixelBuffer = self._ciContext?.createPixelBuffer(fromPixelBuffer: pixelBuffer, withOrientation: .right, pixelBufferPool: pixelBufferPool) {
+            pixelBuffer = adjustedPixelBuffer
+        
+            self.videoDelegate?.nextLevel(self, willProcessFrame: frame, pixelBuffer: pixelBuffer, timestamp: timestamp, onQueue: self._sessionQueue)
+            self._lastARFrame = pixelBuffer
+            
+            if let session = self._recordingSession {
+                self.handleVideoOutput(pixelBuffer: pixelBuffer, timestamp: timestamp, session: session)
+            }
+        }
+    }
+    
+    public func arSession(_ session: ARSession, didOutputAudioSampleBuffer audioSampleBuffer: CMSampleBuffer) {
+        self._lastAudioFrame = audioSampleBuffer
+        if let session = self._recordingSession {
+            self.handleAudioOutput(sampleBuffer: audioSampleBuffer, session: session)
+        }
+    }
+    
+}
+
 // MARK: - queues
 
 extension NextLevel {
@@ -2652,7 +2925,7 @@ extension NextLevel {
         }
     }
     
-    @objc internal func handleSessionWasInterrupted(_ notification: Notification) {
+    @objc public func handleSessionWasInterrupted(_ notification: Notification) {
         self.executeClosureAsyncOnMainQueueIfNecessary {
             if self._recording == true {
                 self.delegate?.nextLevelSessionDidStop(self)
@@ -2661,25 +2934,10 @@ extension NextLevel {
             self.executeClosureAsyncOnMainQueueIfNecessary {
                 self.delegate?.nextLevelSessionWasInterrupted(self)
             }
-            
-            //            if let reason = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? AVCaptureSessionInterruptionReason {
-            //                switch reason {
-            //                case .audioDeviceInUseByAnotherClient:
-            //                    fallthrough
-            //                case .videoDeviceInUseByAnotherClient:
-            //                    // TODO
-            //                    break
-            //                case .videoDeviceNotAvailableWithMultipleForegroundApps:
-            //                    // TODO
-            //                    break
-            //                default:
-            //                    break
-            //                }
-            //            }
         }
     }
     
-    @objc internal func handleSessionInterruptionEnded(_ notification: Notification) {
+    @objc public func handleSessionInterruptionEnded(_ notification: Notification) {
         self.executeClosureAsyncOnMainQueueIfNecessary {
             self.delegate?.nextLevelSessionInterruptionEnded(self)
         }

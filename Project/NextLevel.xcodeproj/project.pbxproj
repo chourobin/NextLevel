@@ -17,6 +17,7 @@
 		06250AA11D8C57B20008C903 /* NextLevel+Foundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */; };
 		06250AA21D8C57B50008C903 /* NextLevel+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06BA97681D7FFDF200CD20D7 /* NextLevel+Metadata.swift */; };
 		06250AA31D8C57B70008C903 /* NextLevel+AVFoundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */; };
+		0644F2371F70905800AA283F /* MixedRealityViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0644F2361F70905800AA283F /* MixedRealityViewController.swift */; };
 		0684A2301EC22C1C00A9F9EB /* FocusIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0684A22F1EC22C1C00A9F9EB /* FocusIndicatorView.swift */; };
 		0699B4BD1D7942D4005958BC /* NextLevel+Foundation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */; };
 		06AECC651AC3830800EFCD03 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06AECC641AC3830800EFCD03 /* AppDelegate.swift */; };
@@ -37,6 +38,7 @@
 		060D50EE1D5BC77E00247AD0 /* NextLevelSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NextLevelSession.swift; path = ../Sources/NextLevelSession.swift; sourceTree = "<group>"; };
 		060D50F01D5BF09F00247AD0 /* NextLevelConfiguration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NextLevelConfiguration.swift; path = ../Sources/NextLevelConfiguration.swift; sourceTree = "<group>"; };
 		060D50F31D5C4D5A00247AD0 /* NextLevelClip.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NextLevelClip.swift; path = ../Sources/NextLevelClip.swift; sourceTree = "<group>"; };
+		0644F2361F70905800AA283F /* MixedRealityViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixedRealityViewController.swift; sourceTree = "<group>"; };
 		0684A22F1EC22C1C00A9F9EB /* FocusIndicatorView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FocusIndicatorView.swift; sourceTree = "<group>"; };
 		0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = "NextLevel+Foundation.swift"; path = "../Sources/NextLevel+Foundation.swift"; sourceTree = "<group>"; };
 		06AECC5F1AC3830800EFCD03 /* NL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NL.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -101,6 +103,7 @@
 				06AECC641AC3830800EFCD03 /* AppDelegate.swift */,
 				06AECC661AC3830800EFCD03 /* CameraViewController.swift */,
 				0684A22F1EC22C1C00A9F9EB /* FocusIndicatorView.swift */,
+				0644F2361F70905800AA283F /* MixedRealityViewController.swift */,
 				06AECC621AC3830800EFCD03 /* Supporting Files */,
 			);
 			name = App;
@@ -145,10 +148,10 @@
 		06CF9CE41F7047B20011CE09 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
-				0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */,
 				06C86E381D81DD5800A43411 /* NextLevel+AVFoundation.swift */,
 				06CF9CE51F7064170011CE09 /* NextLevel+CoreImage.swift */,
 				06CF9CE81F70678D0011CE09 /* NextLevel+CoreMedia.swift */,
+				0699B4BC1D7942D4005958BC /* NextLevel+Foundation.swift */,
 				06BA97681D7FFDF200CD20D7 /* NextLevel+Metadata.swift */,
 			);
 			name = Extensions;
@@ -266,6 +269,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0644F2371F70905800AA283F /* MixedRealityViewController.swift in Sources */,
 				06AECC671AC3830800EFCD03 /* CameraViewController.swift in Sources */,
 				06C86E391D81DD5800A43411 /* NextLevel+AVFoundation.swift in Sources */,
 				06CF9CE91F70678D0011CE09 /* NextLevel+CoreMedia.swift in Sources */,
@@ -361,6 +365,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 4.0;
 			};
 			name = Debug;
 		};
@@ -404,6 +409,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				SWIFT_VERSION = 4.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -416,9 +422,8 @@
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				INFOPLIST_FILE = NextLevel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.nextlevel.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = engineering.NextLevel.NL;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 4.0;
 			};
 			name = Debug;
 		};
@@ -430,10 +435,9 @@
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
 				INFOPLIST_FILE = NextLevel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.nextlevel.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = engineering.NextLevel.NL;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_VERSION = 4.0;
 			};
 			name = Release;
 		};
@@ -459,7 +463,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_VERSION = 3.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
@@ -487,7 +490,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_VERSION = 3.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";

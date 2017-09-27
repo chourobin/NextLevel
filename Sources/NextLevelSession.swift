@@ -35,13 +35,13 @@ public class NextLevelSession: NSObject {
     public var outputDirectory: String
     
     /// Output file type for a session, see AVMediaFormat.h for supported types.
-    public var fileType: AVFileType
+    public var fileType: AVFileType = .mp4
     
     /// Output file extension for a session, see AVMediaFormat.h for supported extensions.
-    public var fileExtension: String
+    public var fileExtension: String = "mp4"
     
     /// Unique identifier for a session.
-    public var identifier: String {
+    public var identifier: UUID {
         get {
             return self._identifier
         }
@@ -57,7 +57,7 @@ public class NextLevelSession: NSObject {
     /// Creates a URL for session output, otherwise nil
     public var url: URL? {
         get {
-            let filename = "\(self.identifier)-NL-merged.\(self.fileExtension)"
+            let filename = "\(self.identifier.uuidString)-NL-merged.\(self.fileExtension)"
             if let url = NextLevelClip.clipURL(withFilename: filename, directoryPath: self.outputDirectory) {
                 return url
             } else {
@@ -155,12 +155,12 @@ public class NextLevelSession: NSObject {
     
     // MARK: - private instance vars
     
-    internal var _identifier: String
+    internal var _identifier: UUID
     internal var _date: Date
     
     internal var _duration: CMTime = kCMTimeZero
-    internal var _clips: [NextLevelClip]
-    internal var _clipFilenameCount: Int
+    internal var _clips: [NextLevelClip] = []
+    internal var _clipFilenameCount: Int = 0
 
     internal var _writer: AVAssetWriter?
     internal var _videoInput: AVAssetWriterInput?
@@ -175,14 +175,14 @@ public class NextLevelSession: NSObject {
     internal var _sessionQueueKey: DispatchSpecificKey<NSObject>
     
     internal var _currentClipDuration: CMTime = kCMTimeZero
-    internal var _currentClipHasAudio: Bool
-    internal var _currentClipHasVideo: Bool
+    internal var _currentClipHasAudio: Bool = false
+    internal var _currentClipHasVideo: Bool = false
 
-    internal var _clipStarted: Bool
-    internal var _timeOffset: CMTime
-    internal var _startTimestamp: CMTime
-    internal var _lastAudioTimestamp: CMTime
-    internal var _lastVideoTimestamp: CMTime
+    internal var _clipStarted: Bool = false
+    internal var _timeOffset: CMTime = kCMTimeInvalid
+    internal var _startTimestamp: CMTime = kCMTimeInvalid
+    internal var _lastAudioTimestamp: CMTime = kCMTimeInvalid
+    internal var _lastVideoTimestamp: CMTime = kCMTimeInvalid
     
     private let NextLevelSessionAudioQueueIdentifier = "engineering.NextLevel.session.audioQueue"
     private let NextLevelSessionQueueIdentifier = "engineering.NextLevel.sessionQueue"
@@ -203,14 +203,9 @@ public class NextLevelSession: NSObject {
     
     /// Initialize.
     override init() {
-        self._identifier = NSUUID().uuidString
+        self._identifier = UUID()
         self._date = Date()
         self.outputDirectory = NSTemporaryDirectory()
-        self.fileType = AVFileType.mp4
-        self.fileExtension = "mp4"
-        
-        self._clips = []
-        self._clipFilenameCount = 0
      
         self._audioQueue = DispatchQueue(label: NextLevelSessionAudioQueueIdentifier)
 
@@ -218,15 +213,6 @@ public class NextLevelSession: NSObject {
         self._sessionQueue = DispatchQueue(label: NextLevelSessionQueueIdentifier)
         self._sessionQueue.setSpecific(key: NextLevelSessionSpecificKey, value: self._sessionQueue)
         self._sessionQueueKey = NextLevelSessionSpecificKey
-
-        self._currentClipHasAudio = false
-        self._currentClipHasVideo = false
-        
-        self._clipStarted = false
-        self._timeOffset = kCMTimeInvalid
-        self._startTimestamp = kCMTimeInvalid
-        self._lastAudioTimestamp = kCMTimeInvalid
-        self._lastVideoTimestamp = kCMTimeInvalid
         
         super.init()
     }
@@ -238,7 +224,7 @@ public class NextLevelSession: NSObject {
         self._pixelBufferAdapter = nil
         
         self._videoConfiguration = nil
-        self._audioConfiguration = nil    
+        self._audioConfiguration = nil
     }
     
 }
@@ -254,18 +240,38 @@ extension NextLevelSession {
     ///   - configuration: Video configuration for video output
     ///   - formatDescription: sample buffer format description
     /// - Returns: True when setup completes successfully
-    public func setupVideo(withSettings settings: [String : Any]?, configuration: NextLevelVideoConfiguration, formatDescription: CMFormatDescription) -> Bool {
-        self._videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: settings, sourceFormatHint: formatDescription)
+    public func setupVideo(withSettings settings: [String : Any]?, configuration: NextLevelVideoConfiguration, formatDescription: CMFormatDescription? = nil) -> Bool {
+        if let formatDescription = formatDescription {
+            self._videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: settings, sourceFormatHint: formatDescription)
+        } else {
+            if let _ = settings?[AVVideoCodecKey],
+                let _ = settings?[AVVideoWidthKey],
+                let _ = settings?[AVVideoHeightKey] {
+                self._videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: settings)
+            } else {
+                print("NextLevelSession, configuration failure for video output")
+                self._videoInput = nil
+                return false
+            }
+        }
+        
         if let videoInput = self._videoInput {
             videoInput.expectsMediaDataInRealTime = true
             videoInput.transform = configuration.transform
             self._videoConfiguration = configuration
             
-            let videoDimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+            var pixelBufferAttri: [String : Any] = [String(kCVPixelBufferPixelFormatTypeKey): Int(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)]
             
-            let pixelBufferAttri: [String : Any] = [String(kCVPixelBufferPixelFormatTypeKey): Int(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
-                                                    String(kCVPixelBufferWidthKey): Float(videoDimensions.width),
-                                                    String(kCVPixelBufferHeightKey): Float(videoDimensions.height)]
+            if let formatDescription = formatDescription {
+                let videoDimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+                pixelBufferAttri[String(kCVPixelBufferWidthKey)] = Float(videoDimensions.width)
+                pixelBufferAttri[String(kCVPixelBufferHeightKey)] = Float(videoDimensions.height)
+            } else if let width = settings?[AVVideoWidthKey],
+                      let height = settings?[AVVideoHeightKey] {
+                pixelBufferAttri[String(kCVPixelBufferWidthKey)] = width
+                pixelBufferAttri[String(kCVPixelBufferHeightKey)] = height
+            }
+            
             self._pixelBufferAdapter = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoInput, sourcePixelBufferAttributes: pixelBufferAttri)
         }
         return self._videoInput != nil
@@ -351,7 +357,7 @@ extension NextLevelSession {
     ///   - imageBuffer: Optional image buffer input for writing a custom buffer
     ///   - minFrameDuration: Current active minimum frame duration
     ///   - completionHandler: Handler when a frame appending operation completes or fails
-    public func appendVideo(withSampleBuffer sampleBuffer: CMSampleBuffer, imageBuffer: CVPixelBuffer?, minFrameDuration: CMTime, completionHandler: NextLevelSessionAppendSampleBufferCompletionHandler) {
+    public func appendVideo(withSampleBuffer sampleBuffer: CMSampleBuffer, customImageBuffer: CVPixelBuffer?, minFrameDuration: CMTime, completionHandler: NextLevelSessionAppendSampleBufferCompletionHandler) {
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         self.startSessionIfNecessary(timestamp: timestamp)
         
@@ -372,14 +378,14 @@ extension NextLevelSession {
             if videoInput.isReadyForMoreMediaData {
                 
                 var bufferToProcess: CVPixelBuffer? = nil
-                if let pixelImageBuffer = imageBuffer {
-                    bufferToProcess = pixelImageBuffer
+                if let customImageBuffer = customImageBuffer {
+                    bufferToProcess = customImageBuffer
                 } else {
                     bufferToProcess = CMSampleBufferGetImageBuffer(sampleBuffer)
                 }
                 
-                if let outputBuffer = bufferToProcess {
-                    if pixelBufferAdapter.append(outputBuffer, withPresentationTime: offsetBufferTimestamp) {
+                if let bufferToProcess = bufferToProcess {
+                    if pixelBufferAdapter.append(bufferToProcess, withPresentationTime: offsetBufferTimestamp) {
                         self._currentClipDuration = (offsetBufferTimestamp + frameDuration) - self._startTimestamp
                         self._lastVideoTimestamp = timestamp
                         self._currentClipHasVideo = true
@@ -391,6 +397,59 @@ extension NextLevelSession {
             }
         }
 
+        print("NextLevel, session failed to append video frame to clip")
+        completionHandler(false)
+    }
+    
+    // Beta: appendVideo(withPixelBuffer:customImageBuffer:timestamp:minFrameDuration:completionHandler:) needs to be tested
+    
+    /// Append video pixel buffer frames to a session for recording.
+    ///
+    /// - Parameters:
+    ///   - sampleBuffer: Sample buffer input to be appended, unless an image buffer is also provided
+    ///   - customImageBuffer: Optional image buffer input for writing a custom buffer
+    ///   - minFrameDuration: Current active minimum frame duration
+    ///   - completionHandler: Handler when a frame appending operation completes or fails
+    public func appendVideo(withPixelBuffer pixelBuffer: CVPixelBuffer, customImageBuffer: CVPixelBuffer?, timestamp: TimeInterval, minFrameDuration: CMTime, completionHandler: NextLevelSessionAppendSampleBufferCompletionHandler) {
+        let timestamp = CMTime(seconds: timestamp, preferredTimescale: minFrameDuration.timescale)
+        self.startSessionIfNecessary(timestamp: timestamp)
+        
+        var frameDuration = minFrameDuration
+        let offsetBufferTimestamp = timestamp - self._timeOffset
+        
+        if let videoConfig = self._videoConfiguration, let timeScale = videoConfig.timescale {
+            if timeScale != 1.0 {
+                let scaledDuration = CMTimeMultiplyByFloat64(duration, timeScale)
+                if self._currentClipDuration.value > 0 {
+                    self._timeOffset = self._timeOffset + (duration - scaledDuration)
+                }
+                frameDuration = scaledDuration
+            }
+        }
+        
+        if let videoInput = self._videoInput, let pixelBufferAdapter = self._pixelBufferAdapter {
+            if videoInput.isReadyForMoreMediaData {
+                
+                var bufferToProcess: CVPixelBuffer? = nil
+                if let customImageBuffer = customImageBuffer {
+                    bufferToProcess = customImageBuffer
+                } else {
+                    bufferToProcess = pixelBuffer
+                }
+                
+                if let bufferToProcess = bufferToProcess {
+                    if pixelBufferAdapter.append(bufferToProcess, withPresentationTime: offsetBufferTimestamp) {
+                        self._currentClipDuration = (offsetBufferTimestamp + frameDuration) - self._startTimestamp
+                        self._lastVideoTimestamp = timestamp
+                        self._currentClipHasVideo = true
+                        completionHandler(true)
+                        return
+                    }
+                }
+                
+            }
+        }
+        
         print("NextLevel, session failed to append video frame to clip")
         completionHandler(false)
     }
@@ -638,7 +697,7 @@ extension NextLevelSession {
     ///   - completionHandler: Handler for when the merging process completes
     public func mergeClips(usingPreset preset: String, completionHandler: @escaping NextLevelSessionMergeClipsCompletionHandler) {
         self.executeClosureAsyncOnSessionQueueIfNecessary {
-            let filename = "\(self.identifier)-NL-merged.\(self.fileExtension)"
+            let filename = "\(self.identifier.uuidString)-NL-merged.\(self.fileExtension)"
 
             let outputURL: URL? = NextLevelClip.clipURL(withFilename: filename, directoryPath: self.outputDirectory)
             var asset: AVAsset? = nil
@@ -678,12 +737,8 @@ extension NextLevelSession {
 // MARK: - composition
 
 extension NextLevelSession {
-
-    internal func appendClips(toComposition composition: AVMutableComposition) {
-        self.appendClips(toComposition: composition, audioMix: nil)
-    }
     
-    internal func appendClips(toComposition composition: AVMutableComposition, audioMix: AVMutableAudioMix?) {
+    internal func appendClips(toComposition composition: AVMutableComposition, audioMix: AVMutableAudioMix? = nil) {
         self.executeClosureSyncOnSessionQueueIfNecessary {
             var videoTrack: AVMutableCompositionTrack? = nil
             var audioTrack: AVMutableCompositionTrack? = nil
@@ -771,7 +826,7 @@ extension NextLevelSession {
 extension NextLevelSession {
     
     internal func nextFileURL() -> URL? {
-        let filename = "\(self.identifier)-NL-clip.\(self._clipFilenameCount).\(self.fileExtension)"
+        let filename = "\(self.identifier.uuidString)-NL-clip.\(self._clipFilenameCount).\(self.fileExtension)"
         if let url = NextLevelClip.clipURL(withFilename: filename, directoryPath: self.outputDirectory) {
             self.removeFile(fileUrl: url)
             self._clipFilenameCount += 1

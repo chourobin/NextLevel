@@ -9,6 +9,7 @@ Next Level is a media capture camera library for iOS written in [Swift](https://
 | &#127916; | “[Vine](http://vine.co)-like” video clip recording and editing |
 | &#128444; | photo capture (raw, jpeg, and from a video frame) |
 | &#128070; | customizable gestural interaction and user interface |
+| &#128160; | [ARKit integration](https://developer.apple.com/arkit/) (beta) |
 | &#128247; | dual camera, wide angle, and telephoto device support |
 | &#128034; | adjustable frame rate on supported hardware (ie fast/slow motion capture) |
 | &#128269; | video zoom |
@@ -28,10 +29,10 @@ Next Level is a media capture camera library for iOS written in [Swift](https://
 
 # CocoaPods
 swift_version = "4.0"
-pod "NextLevel", "~> 0.7.1"
+pod "NextLevel", "~> 0.8.2"
 
 # Carthage
-github "nextlevel/NextLevel" ~> 0.7.1
+github "nextlevel/NextLevel" ~> 0.8.2
 
 # Swift PM
 let package = Package(
@@ -44,7 +45,13 @@ let package = Package(
 
 Alternatively, drop the NextLevel [source files](https://github.com/NextLevel/NextLevel/tree/master/Sources) or project file into your Xcode project.
 
-Need Swift 3? Use release `0.6.3`.
+Need Swift 3.X? Target your Podfile to release version `0.6.3`. Swift 4 support begins with release ‘0.7.1’.
+
+## ARKit
+
+In release `0.8.0`, NextLevel provides a mode for ARKit capture in addition to AVFoundation. This enables a variety of new camera features while leveraging the existing recording capabilities of NextLevel.
+
+The ARKit mode is in beta, so please help out if you encounter an issue or by contributing ideas for improvement. To try it out, uncomment the code found in the AppDelegate to load the `MixedRealityViewController`. I’ll be adding in a Scene renderer shortly, as of now each raw frame is processed just as in AVFoundation.
 
 ## Overview
 

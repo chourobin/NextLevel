@@ -24,6 +24,8 @@
 
 import UIKit
 
+let NextLevelAlbumTitle = "NextLevel"
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
@@ -35,10 +37,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window = UIWindow(frame:UIScreen.main.bounds)
         self.window?.backgroundColor = UIColor.black
         
-        let viewController = CameraViewController()
-        
-        self.window?.rootViewController = viewController
+        // ARSession-based recording sample or AVFoundation-based sample (uncomment for iOS 11 example)
+//        if #available(iOS 11.0, *) {
+//            self.window?.rootViewController = MixedRealityViewController()
+//        }
+        self.window?.rootViewController = CameraViewController()
         self.window?.makeKeyAndVisible()
+        
         return true
     }
 
