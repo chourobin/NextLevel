@@ -940,7 +940,7 @@ extension NextLevel {
                 self.configureSessionDevices()
                 self.updateVideoOrientation()
                 
-                if let vc = self._videoOutput?.connection(withMediaType: AVMediaTypeVideo) {
+                if let vc = self._videoOutput?.connection(with: AVMediaType.video) {
                     if vc.isVideoMirroringSupported {
                         vc.isVideoMirrored = true
                     }
